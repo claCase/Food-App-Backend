@@ -1,0 +1,5 @@
+fastapi[standard]
+jose 
+datetime 
+passlib
+SQLAlchemy
