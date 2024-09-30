@@ -12,7 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.sql import text
-from db import Base, engine
+from .db import Base, engine
 
 recipe_ingredients_association = Table(
     "recipe_ingredients",

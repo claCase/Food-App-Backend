@@ -1,8 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
-import db
-import schemas
-import models
+from . import db
+from . import schemas
+from . import models
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -10,6 +10,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
+
+
+def get_recipe(db: Session, top=10):
+    return db.query(models.Recipe).limit(top).all()
 
 
 def get_recipe_by_id(db: Session, recipe_id: int):
@@ -24,11 +28,11 @@ def get_ingredient_by_id(db: Session, ingredient_id: int):
     )
 
 
-def get_recipe_by_name(db: Session, recipe_title: int):
+def get_recipe_by_name(db: Session, recipe_title: str):
     return db.query(models.Recipe).filter(models.Recipe.title == recipe_title).first()
 
 
-def get_ingredient_by_name(db: Session, ingredient_title: int):
+def get_ingredient_by_name(db: Session, ingredient_title: str):
     return (
         db.query(models.Ingredient)
         .filter(models.Ingredient.title == ingredient_title)
@@ -55,40 +59,51 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 
-def post_recipe(db: Session, recipe: schemas.RecipeBase):
-    def get_or_create_ingredient(ingredient):
-        existing_ingredient = (
-            db.query(models.Ingredient).filter_by(title=ingredient.title).first()
+def get_or_create_ingredient(db: Session, ingredient: schemas.IngredientBase):
+    existing_ingredient = (
+        db.query(models.Ingredient).filter_by(title=ingredient.title).first()
+    )
+    if existing_ingredient:
+        return existing_ingredient
+    else:
+        return models.Ingredient(
+            title=ingredient.title,
+            calories=ingredient.calories,
+            image=ingredient.image,
+            description=ingredient.description,
         )
-        if existing_ingredient:
-            return existing_ingredient
-        else:
-            return models.Ingredient(
-                title=ingredient.title,
-                calories=ingredient.calories,
-                image=ingredient.image,
-                description=ingredient.description,
-            )
 
-    def get_or_create_recipe(recepie):
-        existing_recipe = db.query(models.Recipe).filter_by(title=recipe.title).first()
-        if existing_recipe:
-            return existing_recipe
-        else:
-            return models.Recipe(
-                title=recipe.title,
-                description=recipe.description,
-                instructions=recipe.instructions,
-                image=recipe.image,
-                ingredients=[
-                    get_or_create_ingredient(ing) for ing in recipe.ingredients
-                ],
-            )
 
-    db_recipe = get_or_create_recipe(recipe)
+def get_or_create_recipe(db: Session, recipe: schemas.RecipeBase):
+    existing_recipe = db.query(models.Recipe).filter_by(title=recipe.title).first()
+    if existing_recipe:
+        return existing_recipe
+    else:
+        return models.Recipe(
+            title=recipe.title,
+            description=recipe.description,
+            instructions=recipe.instructions,
+            image=recipe.image,
+            ingredients=[
+                get_or_create_ingredient(db, ing) for ing in recipe.ingredients
+            ],
+        )
+
+
+def post_recipe(db: Session, recipe: schemas.RecipeBase):
+    db_recipe = get_or_create_recipe(db, recipe)
     db.add(db_recipe)
     db.commit()
     db.refresh(db_recipe)
+    return db_recipe
+
+
+def post_ingredient(db: Session, ingredient: schemas.IngredientBase):
+    db_ingredient = get_or_create_ingredient(db, ingredient)
+    db.add(db_ingredient)
+    db.commit()
+    db.refresh(db_ingredient)
+    return db_ingredient
 
 
 if __name__ == "__main__":
