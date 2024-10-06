@@ -1,5 +1,9 @@
-fastapi[standard]
-jose 
-datetime 
-passlib
-SQLAlchemy
+fastapi[standard]==0.115.0
+fastapi-pagination==0.12.29
+jose==1.0.0
+datetime==5.5
+passlib==1.7.4
+SQLAlchemy==2.0.35
+pillow==10.4.0
+alembic==1.13.3
+numpy==2.1.1
