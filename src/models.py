@@ -9,11 +9,10 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Interval, 
-    Mapped, 
     UniqueConstraint
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker, relationship, Mapped
 from sqlalchemy.sql import text
 from .db import Base, engine
 
