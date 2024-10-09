@@ -1,12 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
-from sqlalchemy import select 
+from sqlalchemy import select
 from . import db
 from . import schemas
 from . import models
 from passlib.context import CryptContext
 
 from fastapi_pagination.ext.sqlalchemy import paginate
+import json
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -16,7 +17,7 @@ def get_user(db: Session, user_id: int):
 
 
 def get_recipe(db: Session, top=10):
-    #return paginate(db, select(models.Recipe).limit(top))
+    # return paginate(db, select(models.Recipe).limit(top))
     return db.query(models.Recipe).limit(top).all()
 
 
@@ -64,6 +65,7 @@ def create_user(db: Session, user: schemas.UserCreate):
 
 
 def get_or_create_ingredient(db: Session, ingredient: schemas.IngredientBase):
+    print(ingredient)
     existing_ingredient = (
         db.query(models.Ingredient).filter_by(title=ingredient.title).first()
     )
@@ -78,6 +80,37 @@ def get_or_create_ingredient(db: Session, ingredient: schemas.IngredientBase):
         )
 
 
+def get_or_create_instruction(db: Session, instruction: schemas.InstructionsBase):
+    existing_instruction = (
+        db.query(models.Instructions)
+        .filter_by(step_id=instruction.step_id, instruction=instruction.instruction)
+        .first()
+    )
+    if existing_instruction:
+        return existing_instruction
+    else:
+        return models.Instructions(
+            step_id=instruction.step_id,
+            instruction=instruction.instruction,
+        )
+
+
+def get_or_create_tags(db: Session, tags: schemas.TagsBase):
+    existing_tag = db.query(models.Tag).filter_by(tag=tags.tag).first()
+    if existing_tag:
+        return existing_tag
+    else:
+        return models.Tag(tag=tags.tag)
+
+
+def get_or_create_meal(db: Session, meal: schemas.MealBase):
+    existing_meal = db.query(models.Meal).filter_by(meal=meal.meal).first()
+    if existing_meal:
+        return existing_meal
+    else:
+        return models.Meal(meal=meal.meal)
+
+
 def get_or_create_recipe(db: Session, recipe: schemas.RecipeBase):
     existing_recipe = db.query(models.Recipe).filter_by(title=recipe.title).first()
     if existing_recipe:
@@ -86,12 +119,14 @@ def get_or_create_recipe(db: Session, recipe: schemas.RecipeBase):
         return models.Recipe(
             title=recipe.title,
             description=recipe.description,
-            instructions=recipe.instructions,
-            image=recipe.image,
-            ingredients=[
-                get_or_create_ingredient(db, ing) for ing in recipe.ingredients
+            instructions=[
+                get_or_create_instruction(db, instruction)
+                for instruction in recipe.instructions
             ],
-            duration=recipe.duration
+            image=recipe.image,
+            tags=[get_or_create_tags(db, tag) for tag in recipe.tags],
+            duration=recipe.duration,
+            meal=get_or_create_meal(db, recipe.meal),
         )
 
 
@@ -110,7 +145,68 @@ def post_ingredient(db: Session, ingredient: schemas.IngredientBase):
     db.refresh(db_ingredient)
     return db_ingredient
 
-'''
+
+def add_recipe_with_ingredients(
+    db,
+    recipe: schemas.RecipeBase,
+):
+    db_recipe = post_recipe(db, recipe)
+
+    for base_ingredient in recipe.ingredients:
+        association = models.RecipeIngredientAssociation(
+            recipe=db_recipe,
+            ingredient=get_or_create_ingredient(db, base_ingredient.ingredient),
+            quantity=base_ingredient.quantity,
+            unit=base_ingredient.unit,
+        )
+        db.add(association)
+    db.commit()
+
+
+session = db.SessionLocal()
+
+ingr1 = schemas.IngredientBase(
+    title="whole chicken",
+    description="1 (3½–4-lb.) whole chicken",
+    image="1.jpg",
+    calories=100,
+)
+
+ingr2 = schemas.IngredientBase(
+    title="kosher salt",
+    description="2¾ tsp. kosher salt, divided, plus more",
+    image="1.jpg",
+    calories=100,
+)
+
+
+ingrq1 = schemas.IngredientQuantity(ingredient=ingr1, quantity="2", unit="lb")
+ingrq2 = schemas.IngredientQuantity(ingredient=ingr2, quantity="2¾", unit="tsp.")
+
+instr1 = schemas.InstructionsBase(step_id=1, instruction="Add chicken")
+instr2 = schemas.InstructionsBase(step_id=2, instruction="Add salt")
+instr3 = schemas.InstructionsBase(step_id=3, instruction="Add pepper")
+
+tag1 = schemas.TagsBase(tag="salty")
+tag2 = schemas.TagsBase(tag="sour")
+
+meal = schemas.MealBase(meal="dinner")
+
+recipe1 = schemas.RecipeBase(
+    title="Miso-Butter Roast Chicken With Acorn Squash Panzanella",
+    description="Miso-Butter Roast Chicken With Acorn Squash Panzanella description",
+    instructions=[instr1, instr2, instr3],
+    ingredients=[ingrq1, ingrq2],
+    tags=[tag1, tag2],
+    image="2.jpg",
+    duration=30,
+    meal=meal,
+)
+
+add_recipe_with_ingredients(session, recipe1)
+
+
+"""
 from datetime import timedelta 
 
 session = db.SessionLocal()
@@ -315,4 +411,4 @@ for r in recipes:
     print(f"{r.title} has ingredients:")
     for i in r.ingredients:
         print(f"   - {i.title}")
-'''
+"""

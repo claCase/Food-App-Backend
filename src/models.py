@@ -8,34 +8,48 @@ from sqlalchemy import (
     MetaData,
     Boolean,
     ForeignKey,
-    Interval, 
-    UniqueConstraint
+    Interval,
+    UniqueConstraint,
+    Date,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship, Mapped
+from sqlalchemy.orm import sessionmaker, relationship, Mapped, mapped_column
 from sqlalchemy.sql import text
 from .db import Base, engine
 
 
-# alembic: b6c44c3065c5
-recipe_ingredients_association = Table(
-    "recipe_ingredients",
+recipe_tags_association = Table(
+    "recipe_tags",
     Base.metadata,
     Column("recipe_id", Integer, ForeignKey("recipes.id"), primary_key=True),
-    Column("ingredient_id", Integer, ForeignKey("ingredients.id"), primary_key=True),
-    UniqueConstraint("recipe_id", "ingredient_id", name="uix_recipe_ingredient"), 
-
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+    UniqueConstraint("recipe_id", "tag_id", name="uix_recipe_tag"),
 )
 
-# almebic: 2633a9db05c1 
-recipe_instruction_association = Table(
-    "recipe_instructions", 
-    Base.metadata, 
-    Column("recipe_id", Integer, ForeignKey("recepies.id"), primary_key=True),
-    Column("instruction_id", Integer, ForeignKey("instructions.id"), primary_key=True),
-    UniqueConstraint("recipe_id", "instruction_id", name="uix_recipe_instruction"), 
-
+""" meals_tags_association = Table(
+    "recipe_meals",
+    Base.metadata,
+    Column("recipe_id", Integer, ForeignKey("recipes.id"), primary_key=True),
+    Column("meal_id", Integer, ForeignKey("meals.id"), primary_key=True),
+    UniqueConstraint("recipe_id", "meal_id", name="uix_recipe_meal"),
 )
+ """
+
+
+class RecipeIngredientAssociation(Base):
+    __tablename__ = "recipe_ingredients"
+    __table_args__ = (
+        UniqueConstraint("recipe_id", "ingredient_id", name="uix_recipe_ingredient"),
+    )
+
+    recipe_id = Column(Integer, ForeignKey("recipes.id"), primary_key=True)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), primary_key=True)
+    quantity = Column(String)
+    unit = Column(String)
+
+    recipe = relationship("Recipe", back_populates="ingredients")
+    ingredient = relationship("Ingredient", back_populates="recipe")
+
 
 class Ingredient(Base):
     __tablename__ = "ingredients"
@@ -45,20 +59,16 @@ class Ingredient(Base):
     calories = Column(Integer)
     image = Column(String)
     description = Column(String)
-    recipes = relationship(
-        "Recipe", secondary=recipe_ingredients_association, back_populates="ingredients"
-    )
+    recipe = relationship("RecipeIngredientAssociation", back_populates="ingredient")
+
 
 class Instructions(Base):
-    # almebic: 2633a9db05c1 
     __tablename__ = "instructions"
-
+    __table_args__ = (UniqueConstraint("recipe", "step_id", name="uix_recipe_step"),)
     id = Column(Integer, primary_key=True)
-    step_id = Column(Integer)
-    instruction = Column(String)
-    recipe: Mapped["Recipe"] = relationship(
-        "Recipe", secondary=recipe_instruction_association, back_populates="instructions"
-    )
+    step_id = Column(Integer, index=True)
+    instruction = Column(String, index=True)
+    recipe: Mapped[int] = mapped_column(ForeignKey("recipes.id"))
 
 
 class Recipe(Base):
@@ -67,25 +77,44 @@ class Recipe(Base):
     id = Column(Integer, primary_key=True)
     title = Column(String, unique=True, index=True)
     description = Column(String)
-    instructions = Column(String)
+    ingredients = relationship("RecipeIngredientAssociation", back_populates="recipe")
+    instructions: Mapped[List["Instructions"]] = relationship()
+    tags: Mapped[List["Tag"]] = relationship(
+        secondary=recipe_tags_association, back_populates="recipe"
+    )
     image = Column(String)
     duration = Column(Integer)
-    ingredients = relationship(
-        "Ingredient", secondary=recipe_ingredients_association, back_populates="recipes"
+    meal_id: Mapped[int] = mapped_column(ForeignKey("meals.id"))
+    meal: Mapped[Optional["Meal"]] = relationship(back_populates="recipe")
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    tag = Column(String, unique=True)
+    recipe = relationship(
+        "Recipe", secondary=recipe_tags_association, back_populates="tags"
     )
-    instructions: Mapped[List["Instructions"]] = relationship(
-        "Instructions", secondary=recipe_instruction_association, back_populates="recipes"
-    )
-    
+
+
+class Meal(Base):
+    __tablename__ = "meals"
+    id = Column(Integer, primary_key=True)
+    meal = Column(String, unique=True)
+    recipe: Mapped["Recipe"] = relationship(back_populates="meal")
+
 
 class User(Base):
     __tablename__ = "users"
-
+    __table_args__ = (
+        UniqueConstraint("email", "name", "surname", name="uix_email_name_surname"),
+    )
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True, index=True)
-    name = Column(String, unique=True, index=True)
-    surname = Column(String, unique=True, index=True)
-    age = Column(Integer, unique=True, index=True)
+    name = Column(String, index=True)
+    surname = Column(String, index=True)
+    birthday = Column(Date, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
 
@@ -95,6 +124,7 @@ users_recipe_likes = Table(
     Base.metadata,
     Column("user_id", Integer, ForeignKey("users.id")),
     Column("recipe_id", Integer, ForeignKey("recipes.id")),
+    UniqueConstraint("user_id", "recipe_id", name="uix_user_recipe"),
 )
 
 Base.metadata.create_all(engine)
